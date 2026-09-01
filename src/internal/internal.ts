@@ -74,41 +74,41 @@ const makeItProxy = <Methods extends object>(
 const makeTester = <R>(
   mapEffect: <A, E>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, never>,
   it: Rs.TestAPIs = Rs.it
-): EffectRstest.Rstest.Tester<R> => {
+): EffectRstest.Vitest.Tester<R> => {
   // rstest's test callbacks must return `MaybePromise<void>`, so the test
   // value is intentionally discarded here (vitest accepts any return value)
   const run = <A, E, TestArgs extends Array<unknown>>(
     ctx: Rs.TestContext & object,
     args: TestArgs,
-    self: EffectRstest.Rstest.TestFunction<A, E, R, TestArgs>
+    self: EffectRstest.Vitest.TestFunction<A, E, R, TestArgs>
   ): Promise<any> => pipe(Effect.suspend(() => self(...args)), mapEffect, runTest(ctx))
 
-  const f: EffectRstest.Rstest.Test<R> = (name, self, timeout) =>
+  const f: EffectRstest.Vitest.Test<R> = (name, self, timeout) =>
     it(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const skip: EffectRstest.Rstest.Tester<R>["only"] = (name, self, timeout) =>
+  const skip: EffectRstest.Vitest.Tester<R>["only"] = (name, self, timeout) =>
     it.skip(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const skipIf: EffectRstest.Rstest.Tester<R>["skipIf"] = (condition) => (name, self, timeout) =>
+  const skipIf: EffectRstest.Vitest.Tester<R>["skipIf"] = (condition) => (name, self, timeout) =>
     it.skipIf(Boolean(condition))(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const runIf: EffectRstest.Rstest.Tester<R>["runIf"] = (condition) => (name, self, timeout) =>
+  const runIf: EffectRstest.Vitest.Tester<R>["runIf"] = (condition) => (name, self, timeout) =>
     it.runIf(Boolean(condition))(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const only: EffectRstest.Rstest.Tester<R>["only"] = (name, self, timeout) =>
+  const only: EffectRstest.Vitest.Tester<R>["only"] = (name, self, timeout) =>
     it.only(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const each: EffectRstest.Rstest.Tester<R>["each"] = (cases) => (name, self, timeout) =>
+  const each: EffectRstest.Vitest.Tester<R>["each"] = (cases) => (name, self, timeout) =>
     it.for(cases)(
       name,
       testOptions(timeout),
       (args, ctx) => run(ctx, [args], self) as any
     )
 
-  const fails: EffectRstest.Rstest.Tester<R>["fails"] = (name, self, timeout) =>
+  const fails: EffectRstest.Vitest.Tester<R>["fails"] = (name, self, timeout) =>
     it.fails(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
 
-  const prop: EffectRstest.Rstest.Tester<R>["prop"] = (name, arbitraries, self, timeout) => {
+  const prop: EffectRstest.Vitest.Tester<R>["prop"] = (name, arbitraries, self, timeout) => {
     if (Array.isArray(arbitraries)) {
       const arbs = arbitraries.map((arbitrary) => {
         if (Schema.isSchema(arbitrary)) {
@@ -157,7 +157,7 @@ const makeTester = <R>(
 }
 
 /** @internal */
-export const prop: EffectRstest.Rstest.Methods["prop"] = (name, arbitraries, self, timeout) => {
+export const prop: EffectRstest.Vitest.Methods["prop"] = (name, arbitraries, self, timeout) => {
   if (Array.isArray(arbitraries)) {
     const arbs = arbitraries.map((arbitrary) => {
       if (Schema.isSchema(arbitrary)) {
@@ -201,20 +201,20 @@ export const layer = <R, E>(
     readonly excludeTestServices?: boolean
   }
 ): {
-  (f: (it: EffectRstest.Rstest.MethodsNonLive<R>) => void): void
+  (f: (it: EffectRstest.Vitest.MethodsNonLive<R>) => void): void
   (
     name: string,
-    f: (it: EffectRstest.Rstest.MethodsNonLive<R>) => void
+    f: (it: EffectRstest.Vitest.MethodsNonLive<R>) => void
   ): void
 } =>
 (
   ...args: [
     name: string,
     f: (
-      it: EffectRstest.Rstest.MethodsNonLive<R>
+      it: EffectRstest.Vitest.MethodsNonLive<R>
     ) => void
   ] | [
-    f: (it: EffectRstest.Rstest.MethodsNonLive<R>) => void
+    f: (it: EffectRstest.Vitest.MethodsNonLive<R>) => void
   ]
 ) => {
   const excludeTestServices = options?.excludeTestServices ?? false
@@ -237,7 +237,7 @@ export const layer = <R, E>(
     return runPromise(Scope.close(scope, Exit.void), ctx)
   }
 
-  const makeIt = (it: Rs.TestAPIs): EffectRstest.Rstest.MethodsNonLive<R> =>
+  const makeIt = (it: Rs.TestAPIs): EffectRstest.Vitest.MethodsNonLive<R> =>
     makeItProxy(it, {
       effect: makeTester<R | Scope.Scope>(
         (effect) =>
@@ -263,16 +263,21 @@ export const layer = <R, E>(
     })
 
   if (args.length === 1) {
-    // Rstest has no `getCurrentSuite`, so unlike `@effect/vitest` we cannot
-    // enumerate the tests registered by this unnamed block. The layer is
-    // instead built lazily by the first test that uses it (via the cached
-    // `contextEffect`) and the scope is closed in an `afterAll` hook of the
-    // enclosing suite. Rstest runs `afterAll` hooks in reverse registration
-    // order, so hooks registered before this block still observe the
-    // released resources.
-    args[0](makeIt(Rs.it))
-    Rs.afterAll(() => closeScope(), hookTimeout(options?.timeout))
-    return
+    // Rstest has no `getCurrentSuite`, so use an empty nested suite as the
+    // lifecycle boundary for an unnamed layer block. Rstest omits empty suite
+    // names from test paths, while its beforeAll/afterAll hooks ensure the
+    // scope closes before later tests in the enclosing suite run.
+    return Rs.describe("", () => {
+      Rs.beforeAll(
+        () => runPromise(Effect.asVoid(contextEffect)),
+        hookTimeout(options?.timeout)
+      )
+      Rs.afterAll(
+        () => closeScope(),
+        hookTimeout(options?.timeout)
+      )
+      return args[0](makeIt(Rs.it))
+    })
   }
 
   return Rs.describe(args[0], () => {
@@ -312,7 +317,7 @@ export const flakyTest = <A, E, R>(
   )
 
 /** @internal */
-export const makeMethods = (it: Rs.TestAPIs): EffectRstest.Rstest.Methods =>
+export const makeMethods = (it: Rs.TestAPIs): EffectRstest.Vitest.Methods =>
   makeItProxy(it, {
     effect: makeTester<Scope.Scope>(flow(Effect.scoped, Effect.provide(TestEnv)), it),
     live: makeTester<Scope.Scope>(Effect.scoped, it),
@@ -331,5 +336,5 @@ export const {
 } = makeMethods(Rs.it)
 
 /** @internal */
-export const describeWrapped = (name: string, f: (it: EffectRstest.Rstest.Methods) => void): void =>
+export const describeWrapped = (name: string, f: (it: EffectRstest.Vitest.Methods) => void): void =>
   Rs.describe(name, () => f(makeMethods(Rs.it)))

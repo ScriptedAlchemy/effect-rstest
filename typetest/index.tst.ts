@@ -1,11 +1,23 @@
-import { it, layer } from "effect-rstest"
+import { it, layer, type Rstest, type Vitest } from "effect-rstest"
+import type { Rstest as CoreRstest } from "@rstest/core"
 import { Context, Layer } from "effect"
 import { describe, expect, test } from "tstyche"
 
 class Foo extends Context.Service<Foo, "foo">()("Foo") {}
 class Bar extends Context.Service<Bar, "bar">()("Bar") {}
 
+type CoreRstestReexport = Rstest extends CoreRstest ? true : false
+type EffectMethodsNamespace = Vitest.Methods
+
+const coreRstestReexport: CoreRstestReexport = true
+const effectMethodsNamespace: EffectMethodsNamespace = it
+
 describe("layer", () => {
+  test("re-exports the core Rstest type without shadowing it", () => {
+    expect(coreRstestReexport).type.toBe<true>()
+    expect(effectMethodsNamespace).type.toBe<EffectMethodsNamespace>()
+  })
+
   test("top-level export accepts full options", () => {
     expect(layer).type.toBeCallableWith(Layer.succeed(Foo, "foo"), {
       timeout: "5 seconds",

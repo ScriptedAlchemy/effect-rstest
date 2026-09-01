@@ -1,4 +1,4 @@
-import { afterAll, assert, describe, expect, it, layer } from "effect-rstest"
+import { afterAll, assert, describe, describeWrapped, expect, it, layer } from "effect-rstest"
 import * as testAssert from "effect-rstest/utils"
 import { Clock, Context, Duration, Effect, Fiber, Layer, Schema } from "effect"
 import { FastCheck, TestClock } from "effect/testing"
@@ -11,6 +11,10 @@ it.live(
   "live",
   () => Effect.acquireRelease(Effect.sync(() => expect(1).toEqual(1)), () => Effect.void)
 )
+
+describeWrapped("describeWrapped", (it) => {
+  it.effect("provides the enhanced test API", () => Effect.sync(() => expect(typeof it.layer).toEqual("function")))
+})
 
 it("throws fails when the thunk does not throw", () => {
   expect(() => testAssert.throws(() => {})).toThrow()
