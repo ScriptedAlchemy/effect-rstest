@@ -7,7 +7,7 @@
   "homepage": "https://github.com/ScriptedAlchemy/effect-rstest",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ScriptedAlchemy/effect-rstest.git"
+    "url": "git+https://github.com/ScriptedAlchemy/effect-rstest.git"
   },
   "bugs": {
     "url": "https://github.com/ScriptedAlchemy/effect-rstest/issues"
@@ -40,7 +40,8 @@
     "check": "tsc --noEmit",
     "test": "rstest",
     "test:types": "tstyche",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "publint": "publint --strict"
   },
   "peerDependencies": {
     "@rstest/core": "^0.11.0",
@@ -51,6 +52,7 @@
     "@types/node": "^26.4.0",
     "effect": "4.0.0-rc.112",
     "pkg-pr-new": "0.0.88",
+    "publint": "^0.3.24",
     "tsdown": "^0.22.14",
     "tstyche": "^7.2.3",
     "typescript": "^5.9.2"
