@@ -17,6 +17,9 @@ importers:
       effect:
         specifier: 4.0.0-rc.112
         version: 4.0.0-rc.112
+      pkg-pr-new:
+        specifier: 0.0.88
+        version: 0.0.88
       tsdown:
         specifier: ^0.22.14
         version: 0.22.14(typescript@5.9.3)
@@ -522,6 +525,10 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
+  pkg-pr-new@0.0.88:
+    resolution: {integrity: sha512-Xc6PMJ2gher0WZP+rtjefFk26hIb7V1PTLL30bmy1Z2vsRmSvqiss7Ag1XUdyplTGYzIlFNJp4L3vMNmK44N6g==}
+    hasBin: true
+
   pure-rand@8.4.2:
     resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
@@ -972,6 +979,8 @@ snapshots:
   obug@2.1.4: {}
 
   picomatch@4.0.7: {}
+
+  pkg-pr-new@0.0.88: {}
 
   pure-rand@8.4.2: {}
 

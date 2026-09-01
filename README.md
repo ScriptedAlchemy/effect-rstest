@@ -13,6 +13,16 @@ npm install effect@rc
 
 `effect-rstest` declares `effect` (v4, currently the `4.0.0-rc` line) and `@rstest/core` as peer dependencies.
 
+### Preview / canary builds
+
+Every pull request and every push to `main` publishes a canary tarball via [pkg.pr.new](https://github.com/stackblitz-labs/pkg.pr.new). Install one with the PR number or a commit SHA:
+
+```sh
+pnpm add https://pkg.pr.new/ScriptedAlchemy/effect-rstest@<pr-number-or-sha>
+```
+
+The publish workflow (and the shorter compact URLs like `https://pkg.pr.new/effect-rstest@<sha>`) require the [pkg.pr.new GitHub App](https://github.com/apps/pkg-pr-new) to be installed on the repository.
+
 Add a test script and an `rstest.config.ts`:
 
 ```json
