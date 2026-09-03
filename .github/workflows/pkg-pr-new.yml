@@ -1,0 +1,28 @@
+name: Publish canary (pkg.pr.new)
+
+# Publishes a preview tarball for every PR and every push to main via
+# https://github.com/stackblitz-labs/pkg.pr.new. Kept separate from CI so
+# canary publishing does not wait on the full test suite.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # required: package.json `exports` point at dist/
+      - run: pnpm build
+      - run: pnpm exec pkg-pr-new publish --commentWithSha --pnpm
