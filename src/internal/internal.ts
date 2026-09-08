@@ -5,7 +5,9 @@
 import * as Cause from "effect/Cause"
 import * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
+import * as Equal from "effect/Equal"
 import * as Exit from "effect/Exit"
+import * as Fiber from "effect/Fiber"
 import { flow, pipe } from "effect/Function"
 import * as Layer from "effect/Layer"
 import { isObject } from "effect/Predicate"
@@ -34,7 +36,17 @@ const runPromise: <E, A>(
 }, (effect, _, ctx) => Effect.runPromise(effect, { signal: ctx?.signal }))
 
 /** @internal */
-const runTest = (ctx?: Rs.TestContext) => <E, A>(effect: Effect.Effect<A, E>) => runPromise(effect, ctx)
+const runTest = (ctx?: Rs.TestContext) => <E, A>(effect: Effect.Effect<A, E>) => {
+  let settlement: Promise<void> | undefined
+  // Rstest does not await timed-out callbacks. Await finalizers before the next
+  // test or suite teardown, without imposing a second cleanup deadline.
+  // Native afterEach hooks run before onTestFinished and are not covered.
+  ctx?.onTestFinished(() => settlement, 0)
+  const result = runPromise(effect, ctx)
+  // Preserve the original result without rethrowing already-handled failures.
+  settlement = result.then(() => {}, () => {})
+  return result
+}
 
 /** @internal */
 export type TestContext = TestConsole.TestConsole | TestClock.TestClock
@@ -43,7 +55,9 @@ const TestEnv = Layer.mergeAll(TestConsole.layer, TestClock.layer())
 
 /** @internal */
 export const addEqualityTesters = () => {
-  Rs.expect.addEqualityTesters([])
+  Rs.expect.addEqualityTesters([
+    (a, b) => Equal.isEqual(a) && Equal.isEqual(b) ? Equal.equals(a, b) : undefined
+  ])
 }
 
 /** @internal */
@@ -81,7 +95,7 @@ const makeTester = <R>(
     ctx: Rs.TestContext & object,
     args: TestArgs,
     self: EffectRstest.Vitest.TestFunction<A, E, R, TestArgs>
-  ): Promise<any> => pipe(Effect.suspend(() => self(...args)), mapEffect, runTest(ctx))
+  ): Promise<void> => pipe(Effect.suspend(() => self(...args)), mapEffect, Effect.asVoid, runTest(ctx))
 
   const f: EffectRstest.Vitest.Test<R> = (name, self, timeout) =>
     it(name, testOptions(timeout), (ctx) => run(ctx, [ctx], self))
@@ -161,7 +175,7 @@ export const prop: EffectRstest.Vitest.Methods["prop"] = (name, arbitraries, sel
   if (Array.isArray(arbitraries)) {
     const arbs = arbitraries.map((arbitrary) => {
       if (Schema.isSchema(arbitrary)) {
-        throw new Error("Schemas are not supported yet")
+        return Schema.toArbitrary(arbitrary)(fc)
       }
       return arbitrary
     })
@@ -176,10 +190,7 @@ export const prop: EffectRstest.Vitest.Methods["prop"] = (name, arbitraries, sel
   const arbs = fc.record(
     Object.keys(arbitraries).reduce(function(result, key) {
       const arb: any = arbitraries[key]
-      if (Schema.isSchema(arb)) {
-        throw new Error("Schemas are not supported yet")
-      }
-      Rec.assignProperty(result, key, arb)
+      Rec.assignProperty(result, key, Schema.isSchema(arb) ? Schema.toArbitrary(arb)(fc) : arb)
       return result
     }, {} as Record<string, fc.Arbitrary<any>>)
   )
@@ -228,13 +239,26 @@ export const layer = <R, E>(
     Effect.cached,
     Effect.runSync
   )
+  let setupFiber: Fiber.Fiber<unknown, unknown> | undefined
+  const buildContext = () => runPromise(Effect.withFiber((fiber) => {
+    setupFiber = fiber
+    return Effect.asVoid(contextEffect)
+  }))
   let closed = false
   const closeScope = (ctx?: Rs.TestContext) => {
     if (closed) {
       return Promise.resolve()
     }
     closed = true
-    return runPromise(Scope.close(scope, Exit.void), ctx)
+    // SuiteContext has no AbortSignal, so timed-out setup may still be running.
+    // Interrupt and await it before releasing resources it may still be using.
+    return runPromise(
+      Effect.andThen(
+        setupFiber !== undefined ? Fiber.interrupt(setupFiber) : Effect.void,
+        Scope.close(scope, Exit.void)
+      ),
+      ctx
+    )
   }
 
   const makeIt = (it: Rs.TestAPIs): EffectRstest.Vitest.MethodsNonLive<R> =>
@@ -269,7 +293,7 @@ export const layer = <R, E>(
     // scope closes before later tests in the enclosing suite run.
     return Rs.describe("", () => {
       Rs.beforeAll(
-        () => runPromise(Effect.asVoid(contextEffect)),
+        buildContext,
         hookTimeout(options?.timeout)
       )
       Rs.afterAll(
@@ -282,7 +306,7 @@ export const layer = <R, E>(
 
   return Rs.describe(args[0], () => {
     Rs.beforeAll(
-      () => runPromise(Effect.asVoid(contextEffect)),
+      buildContext,
       hookTimeout(options?.timeout)
     )
     Rs.afterAll(
