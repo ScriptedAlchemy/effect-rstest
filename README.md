@@ -295,6 +295,10 @@ it.live("it.live displays a log", () =>
 
 Both `it.effect` and `it.live` provide a fresh `Scope` and close it after each test. Test bodies can therefore use scoped resources directly. Do not wrap the test body in `Effect.scoped`, because the test runner already manages its scope.
 
+The test fiber receives Rstest's abort signal. If a test times out, the runner still reports the timeout, but an `onTestFinished` barrier waits for fiber settlement and scoped finalizers before later sequential tests and suite-layer release. The barrier does not impose a second cleanup timeout: a finalizer that never completes can prevent the suite from progressing. Successful non-void Effect values are discarded; ordinary failures and `.fails` outcomes retain their runner semantics.
+
+**Native hook boundary:** Rstest runs native `afterEach` hooks before `onTestFinished`. On timeout, those hooks can run before Effect cleanup finishes; the settlement guarantee does not cover them. It also does not serialize tests explicitly scheduled concurrently.
+
 **Example** (Managing a Resource Lifecycle)
 
 ```ts
@@ -316,7 +320,9 @@ it.effect("run with scope", () =>
 
 ## Sharing Layers with `layer`
 
-Share a `Layer` between multiple tests, optionally wrapping the tests in a `describe` block if a name is provided:
+Share a `Layer` between multiple tests, optionally wrapping the tests in a `describe` block if a name is provided.
+
+Rstest's suite hook context has no abort signal. When setup exceeds an explicit layer `timeout`, or the inherited `hookTimeout` when omitted, suite teardown interrupts and awaits the setup fiber before closing its scope. This also releases resources acquired before an early setup failure. The teardown hook retains the same timeout: cleanup that exceeds it can outlive the hook and is not a bounded-cleanup guarantee. Hook failures remain runner failures. Named and unnamed layer blocks use the same lifecycle boundary.
 
 ```ts
 import { assert, layer } from "effect-rstest"
@@ -408,6 +414,8 @@ it.effect.prop("schema with object", { value: Schema.Int }, ({ value }) =>
   Effect.sync(() => assert.isTrue(Number.isInteger(value))))
 ```
 
+All three helpers accept both tuple and record inputs, mixing schemas and FastCheck arbitraries. Schemas are converted with `Schema.toArbitrary(schema)(FastCheck)`; FastCheck arbitraries are used directly. For example, a synchronous property can use `[Schema.Literal("schema"), FastCheck.integer()]` or `{ label: Schema.Literal("schema"), count: FastCheck.integer() }`. A schema must support arbitrary generation; this does not make every possible schema generatable.
+
 FastCheck parameters can be passed through the options argument: `{ fastCheck: { numRuns: 200 } }`.
 
 ## Differences from `@effect/vitest`
@@ -420,7 +428,7 @@ Rstest is intentionally Vitest-compatible, so most of the port is mechanical (`v
 - **Unnamed `layer(...)((it) => ...)` blocks**: Rstest has no `getCurrentSuite()` API, so the block's tests cannot be enumerated. The port uses an empty nested `describe` as the lifecycle boundary instead. Rstest omits the empty suite name from test paths, while its `beforeAll`/`afterAll` hooks ensure the layer is built before the block and released before a later test in the enclosing suite runs. Named blocks use the same hook lifecycle with their provided suite name.
 - **`skipIf` / `runIf` coercion**: Rstest types the condition as `boolean` (Vitest accepts `unknown`), so the condition is coerced with `Boolean(...)`. The public signature still accepts `unknown`.
 - **Test return values**: Rstest test callbacks must return `void`/`Promise<void>`, so the value produced by the test effect is not returned to the runner (it is discarded, as in `@effect/vitest` this value was ignored by Vitest anyway).
-- **`addEqualityTesters`**: works unchanged via `expect.addEqualityTesters` from `@rstest/core`.
+- **`addEqualityTesters`**: opt in by calling `addEqualityTesters()` in your test setup. When both compared values implement Effect's `Equal` protocol, the tester delegates to `Equal.equals`, including semantic inequality and nested comparisons. For other values it returns `undefined`, leaving plain-object equality and asymmetric matchers to Rstest. It does not replace Rstest's equality behavior globally.
 
 ## License
 
