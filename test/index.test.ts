@@ -1,7 +1,8 @@
 import { afterAll, assert, describe, describeWrapped, expect, it, layer } from "effect-rstest"
 import * as testAssert from "effect-rstest/utils"
 import { Clock, Context, Duration, Effect, Fiber, Layer, Schema } from "effect"
-import { FastCheck, TestClock } from "effect/testing"
+import { TestClock } from "effect/testing"
+import { Arbitrary } from "effect/unstable/arbitrary"
 
 it.effect(
   "effect",
@@ -171,7 +172,7 @@ describe("layer", () => {
             expect(foo).toEqual("foo")
             return num === num
           }),
-        { fastCheck: { numRuns: 200 } }
+        { arbitrary: { runs: 200 } }
       )
     })
   })
@@ -213,13 +214,44 @@ describe("layer", () => {
 
 // property testing
 
-const realNumber = FastCheck.float({ noNaN: true, noDefaultInfinity: true })
+const realNumber = Schema.Finite
+const textArbitrary = Arbitrary.schema(Schema.Literals(["a", "b"]))
 
-it.prop("symmetry", [realNumber, FastCheck.integer()], ([a, b]) => a + b === b + a)
+let mixedTupleRuns = 0
+let mixedRecordRuns = 0
+afterAll(() => {
+  assert.strictEqual(mixedTupleRuns, 5)
+  assert.strictEqual(mixedRecordRuns, 5)
+})
+
+it.prop(
+  "Schema and Arbitrary with array",
+  [Schema.Int, textArbitrary],
+  ([count, text]) => {
+    mixedTupleRuns++
+    assert.isTrue(Number.isInteger(count))
+    assert.include(["a", "b"], text)
+  },
+  { arbitrary: { runs: 5, maxDiscards: 0, seed: "rstest-mixed-tuple" } }
+)
+
+it.effect.prop(
+  "Schema and Arbitrary with object",
+  { count: Schema.Int, text: textArbitrary },
+  ({ count, text }) =>
+    Effect.sync(() => {
+      mixedRecordRuns++
+      assert.isTrue(Number.isInteger(count))
+      assert.include(["a", "b"], text)
+    }),
+  { arbitrary: { runs: 5, maxDiscards: 0, seed: "rstest-mixed-record" } }
+)
+
+it.prop("symmetry", [realNumber, Schema.Int], ([a, b]) => a + b === b + a)
 
 it.prop(
   "symmetry with object",
-  { a: realNumber, b: FastCheck.integer() },
+  { a: realNumber, b: Schema.Int },
   ({ a, b }) => a + b === b + a
 )
 
@@ -229,13 +261,13 @@ it.live.prop(
   ({ value }) => Effect.sync(() => assert.isTrue(Number.isInteger(value)))
 )
 
-it.effect.prop("symmetry", [realNumber, FastCheck.integer()], ([a, b]) =>
+it.effect.prop("symmetry", [realNumber, Schema.Int], ([a, b]) =>
   Effect.gen(function*() {
     yield* Effect.void
     assert.isTrue(a + b === b + a)
   }))
 
-it.effect.prop("symmetry with object", { a: realNumber, b: FastCheck.integer() }, ({ a, b }) =>
+it.effect.prop("symmetry with object", { a: realNumber, b: Schema.Int }, ({ a, b }) =>
   Effect.gen(function*() {
     yield* Effect.void
     assert.strictEqual(a + b, b + a)
@@ -243,7 +275,7 @@ it.effect.prop("symmetry with object", { a: realNumber, b: FastCheck.integer() }
 
 it.effect.prop(
   "should detect the substring",
-  { a: FastCheck.string(), b: FastCheck.string(), c: FastCheck.string() },
+  { a: Schema.String, b: Schema.String, c: Schema.String },
   ({ a, b, c }) =>
     Effect.gen(function*() {
       yield* Effect.scope
