@@ -85,6 +85,9 @@ export namespace Vitest {
      * shrinking. This includes typed Effect failures, thrown exceptions, and defects such as failed assertions.
      * Effect interruption continues to interrupt the test.
      *
+     * The test timeout interrupts the Effect fiber running generation, property evaluation, and shrinking. Effect
+     * finalizers run during that interruption. A timeout cannot preempt a synchronous callback that never returns.
+     *
      * @since 0.1.0
      */
     prop: <const Arbs extends Arbitraries, A, E>(
@@ -134,6 +137,9 @@ export namespace Vitest {
      *
      * Returning `false` or throwing falsifies the property and triggers shrinking. A callback that returns
      * normally without returning `false` passes for that generated input.
+     *
+     * The test timeout interrupts the Effect fiber running generation and shrinking. A timeout cannot preempt a
+     * synchronous callback that never returns.
      *
      * @since 0.1.0
      */

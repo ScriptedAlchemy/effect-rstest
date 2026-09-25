@@ -417,7 +417,7 @@ it.effect.prop("schema with object", { value: Schema.Int }, ({ value }) =>
 
 All three helpers accept tuple and record inputs. Schemas are converted with `Arbitrary.schema(schema)`; `Arbitrary` values are used directly. A schema must support arbitrary generation.
 
-Returning `false`, throwing, or failing the Effect (including failed assertions) falsifies the property and shrinks the input; interruption still interrupts the test. The test timeout interrupts generation, evaluation, and shrinking, and Effect finalizers run.
+Returning `false`, throwing, or failing the Effect (including failed assertions) falsifies the property and shrinks the input; interruption still interrupts the test. The test timeout interrupts generation, evaluation, and shrinking, and Effect finalizers run. A timeout cannot preempt a synchronous callback that never returns.
 
 Check options are passed as `arbitrary` in the options argument: `{ arbitrary: { runs: 200, seed: "repro" } }` (see `Arbitrary.CheckOptions`).
 
