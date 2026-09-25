@@ -65,7 +65,7 @@ This import enhances the standard `it` function from `@rstest/core` with several
 | `it.effect`    | Runs a scoped test with test services such as `TestClock` and `TestConsole`.                        |
 | `it.live`      | Runs a scoped test with the live Effect environment.                                                |
 | `it.layer`     | Shares a `Layer` between multiple tests.                                                            |
-| `it.prop`      | Runs property tests using Effect `Schema` values or FastCheck arbitraries.                          |
+| `it.prop`      | Runs property tests using Effect `Schema` values or `Arbitrary` inputs.                             |
 | `it.flakyTest` | Retries an Effect that might occasionally fail until it succeeds or reaches the configured timeout. |
 
 The package also re-exports everything from `@rstest/core` (`describe`, `expect`, `assert`, hooks, `rs`, ...), so a single import usually suffices, and provides the same assertion helpers as `@effect/vitest/utils` under `effect-rstest/utils`.
@@ -390,33 +390,38 @@ it.effect("retrying until success or timeout", () => it.flakyTest(flaky, "5 seco
 
 ## Property Testing with `it.prop`
 
-`it.prop`, `it.effect.prop` and `it.live.prop` run property tests using FastCheck arbitraries (from `effect/testing/FastCheck`) or Effect `Schema` values:
+`it.prop`, `it.effect.prop` and `it.live.prop` run property tests using Effect `Schema` values or arbitraries from `effect/unstable/arbitrary`:
 
 ```ts
 import { assert, it } from "effect-rstest"
 import { Effect, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary } from "effect/unstable/arbitrary"
 
-const realNumber = FastCheck.float({ noNaN: true, noDefaultInfinity: true })
+const realNumber = Schema.Finite
+const letter = Arbitrary.schema(Schema.Literals(["a", "b"]))
 
 // synchronous properties
-it.prop("symmetry", [realNumber, FastCheck.integer()], ([a, b]) => a + b === b + a)
+it.prop("symmetry", [realNumber, Schema.Int], ([a, b]) => a + b === b + a)
 
-// named arbitraries
+// named inputs, mixing schemas and arbitraries
 it.prop(
-  "symmetry with object",
-  { a: realNumber, b: FastCheck.integer() },
-  ({ a, b }) => a + b === b + a
+  "letters",
+  { count: Schema.Int, text: letter },
+  ({ count, text }) => Number.isInteger(count) && ["a", "b"].includes(text)
 )
 
-// effectful properties, with Schema-derived arbitraries
+// effectful properties
 it.effect.prop("schema with object", { value: Schema.Int }, ({ value }) =>
   Effect.sync(() => assert.isTrue(Number.isInteger(value))))
 ```
 
-All three helpers accept both tuple and record inputs, mixing schemas and FastCheck arbitraries. Schemas are converted with `Schema.toArbitrary(schema)(FastCheck)`; FastCheck arbitraries are used directly. For example, a synchronous property can use `[Schema.Literal("schema"), FastCheck.integer()]` or `{ label: Schema.Literal("schema"), count: FastCheck.integer() }`. A schema must support arbitrary generation; this does not make every possible schema generatable.
+All three helpers accept tuple and record inputs. Schemas are converted with `Arbitrary.schema(schema)`; `Arbitrary` values are used directly. A schema must support arbitrary generation.
 
-FastCheck parameters can be passed through the options argument: `{ fastCheck: { numRuns: 200 } }`.
+Returning `false`, throwing, or failing the Effect (including failed assertions) falsifies the property and shrinks the input; interruption still interrupts the test. The test timeout interrupts generation, evaluation, and shrinking, and Effect finalizers run. A timeout cannot preempt a synchronous callback that never returns.
+
+Check options are passed as `arbitrary` in the options argument: `{ arbitrary: { runs: 200, seed: "repro" } }` (see `Arbitrary.CheckOptions`).
+
+Requires `effect` `4.0.0-rc.113` or later. Earlier releases of `effect-rstest` used `effect/testing/FastCheck`, which Effect removed in rc.113; migrate `FastCheck.*` inputs to schemas or `Arbitrary`, and `{ fastCheck: { numRuns } }` to `{ arbitrary: { runs } }`.
 
 ## Differences from `@effect/vitest`
 

@@ -13,7 +13,7 @@ import type * as Effect from "effect/Effect"
 import type * as Layer from "effect/Layer"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
-import type * as FC from "effect/testing/FastCheck"
+import type * as Arbitrary from "effect/unstable/arbitrary/Arbitrary"
 import * as Rs from "@rstest/core"
 import * as internal from "./internal/internal.js"
 
@@ -58,8 +58,12 @@ export namespace Vitest {
    * @since 0.1.0
    */
   export type Arbitraries =
-    | Array<Schema.Schema<any> | FC.Arbitrary<any>>
-    | { [K in string]: Schema.Schema<any> | FC.Arbitrary<any> }
+    | Array<Schema.Schema<any> | Arbitrary.Arbitrary<any>>
+    | { [K in string]: Schema.Schema<any> | Arbitrary.Arbitrary<any> }
+
+  type ArbitraryValue<A> = A extends Schema.Schema<infer T> ? T
+    : A extends Arbitrary.Arbitrary<infer T> ? T
+    : never
 
   /**
    * @since 0.1.0
@@ -75,6 +79,15 @@ export namespace Vitest {
     fails: Vitest.Test<R>
 
     /**
+     * Runs an Effectful property test using Schema or Arbitrary inputs.
+     *
+     * Returning `false` or completing with any non-interruption failure falsifies the property and triggers
+     * shrinking. This includes typed Effect failures, thrown exceptions, and defects such as failed assertions.
+     * Effect interruption continues to interrupt the test.
+     *
+     * The test timeout interrupts the Effect fiber running generation, property evaluation, and shrinking. Effect
+     * finalizers run during that interruption. A timeout cannot preempt a synchronous callback that never returns.
+     *
      * @since 0.1.0
      */
     prop: <const Arbs extends Arbitraries, A, E>(
@@ -86,9 +99,7 @@ export namespace Vitest {
         R,
         [
           {
-            [K in keyof Arbs]: Arbs[K] extends FC.Arbitrary<infer T> ? T
-              : Arbs[K] extends Schema.Schema<infer T> ? T
-              : never
+            [K in keyof Arbs]: ArbitraryValue<Arbs[K]>
           },
           Rs.TestContext
         ]
@@ -96,12 +107,7 @@ export namespace Vitest {
       timeout?:
         | number
         | Rs.TestOptions & {
-          fastCheck?: FC.Parameters<
-            {
-              [K in keyof Arbs]: Arbs[K] extends FC.Arbitrary<infer T> ? T : Arbs[K] extends Schema.Schema<infer T> ? T
-              : never
-            }
-          >
+          arbitrary?: Arbitrary.CheckOptions
         }
     ) => void
   }
@@ -127,6 +133,14 @@ export namespace Vitest {
     }
 
     /**
+     * Runs a synchronous property test using Schema or Arbitrary inputs.
+     *
+     * Returning `false` or throwing falsifies the property and triggers shrinking. A callback that returns
+     * normally without returning `false` passes for that generated input.
+     *
+     * The test timeout interrupts the Effect fiber running generation and shrinking. A timeout cannot preempt a
+     * synchronous callback that never returns.
+     *
      * @since 0.1.0
      */
     readonly prop: <const Arbs extends Arbitraries>(
@@ -134,20 +148,14 @@ export namespace Vitest {
       arbitraries: Arbs,
       self: (
         properties: {
-          [K in keyof Arbs]: Arbs[K] extends FC.Arbitrary<infer T> ? T : Arbs[K] extends Schema.Schema<infer T> ? T
-          : never
+          [K in keyof Arbs]: ArbitraryValue<Arbs[K]>
         },
         ctx: Rs.TestContext
       ) => void,
       timeout?:
         | number
         | Rs.TestOptions & {
-          fastCheck?: FC.Parameters<
-            {
-              [K in keyof Arbs]: Arbs[K] extends FC.Arbitrary<infer T> ? T : Arbs[K] extends Schema.Schema<infer T> ? T
-              : never
-            }
-          >
+          arbitrary?: Arbitrary.CheckOptions
         }
     ) => void
   }
